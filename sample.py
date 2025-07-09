@@ -1,12 +1,16 @@
 import asyncio
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List, Optional
 from playwright.async_api import async_playwright
 import time
 import re
+import uvicorn
 
-async def scrape_flipkart(query: str):
+async def scrape_flipkart(query: str, max_results: int = 20):
     url = f"https://www.flipkart.com/search?q={query.replace(' ', '+')}"
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)  # Set to False for debugging
+        browser = await p.chromium.launch(headless=True)  # Headless for production API
         page = await browser.new_page()
         
         # Set user agent to avoid bot detection
@@ -41,19 +45,20 @@ async def scrape_flipkart(query: str):
                 await page.wait_for_selector(selector, timeout=5000)
                 product_cards = await page.query_selector_all(selector)
                 if product_cards:
-                    print(f"Found {len(product_cards)} products with selector: {selector}")
+                    # print(f"Found {len(product_cards)} products with selector: {selector}")
                     break
             except:
                 continue
         
         if not product_cards:
-            print("No product cards found with any selector")
+            # print("No product cards found with any selector")
             await browser.close()
             return []
 
-        for i, card in enumerate(product_cards):
+        for i, card in enumerate(product_cards[:max_results]):  # Limit to max_results
             try:
-                print(f"Processing card {i+1}...")
+                # Remove debug prints for production API
+                # print(f"Processing card {i+1}...")
                 
                 # Extract product URL first
                 link_el = await card.query_selector("a")
@@ -71,9 +76,10 @@ async def scrape_flipkart(query: str):
                             product_name_part = url_parts[1]
                             # Replace dashes with spaces and capitalize
                             title = product_name_part.replace('-', ' ').title()
-                            print(f"Extracted title from URL: {title}")
+                            # print(f"Extracted title from URL: {title}")
                     except Exception as e:
-                        print(f"Error extracting title from URL: {e}")
+                        # print(f"Error extracting title from URL: {e}")
+                        pass
 
                 # Try multiple selectors for title as backup
                 if not title:
@@ -90,9 +96,11 @@ async def scrape_flipkart(query: str):
                     try:
                         title = await link_el.get_attribute("title")
                         if title:
-                            print(f"Found title from link attribute: {title}")
+                            # print(f"Found title from link attribute: {title}")
+                            pass
                     except Exception as e:
-                        print(f"Error getting title attribute: {e}")
+                        # print(f"Error getting title attribute: {e}")
+                        pass
 
                 # Last resort: try to find any text that looks like a product name
                 if not title:
@@ -220,14 +228,72 @@ async def scrape_flipkart(query: str):
         await browser.close()
         return products
 
-# For quick testing
+# FastAPI app setup
+app = FastAPI(title="Flipkart Product Scraper", version="1.0.0")
+
+# Pydantic models
+class ProductResponse(BaseModel):
+    title: str
+    price: str | int
+    url: str
+    rating: Optional[str] = None
+    site: str = "Flipkart"
+
+class SearchRequest(BaseModel):
+    query: str
+    max_results: Optional[int] = 20
+
+class SearchResponse(BaseModel):
+    products: List[ProductResponse]
+    total_found: int
+    query: str
+
+@app.get("/")
+async def root():
+    return {"message": "Flipkart Product Scraper API", "docs": "/docs"}
+
+@app.post("/search", response_model=SearchResponse)
+async def search_products(request: SearchRequest):
+    """
+    Search for products on Flipkart
+    """
+    try:
+        products = await scrape_flipkart(request.query, request.max_results)
+        return SearchResponse(
+            products=products,
+            total_found=len(products),
+            query=request.query
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error scraping products: {str(e)}")
+
+@app.get("/search/{query}")
+async def search_products_get(query: str, max_results: int = 20):
+    """
+    Search for products on Flipkart using GET request
+    """
+    try:
+        products = await scrape_flipkart(query, max_results)
+        return SearchResponse(
+            products=products,
+            total_found=len(products),
+            query=query
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error scraping products: {str(e)}")
+
+# For quick testing and running the FastAPI app
 if __name__ == "__main__":
-    query = "iPhone 14"  # Simplified query for testing
-    results = asyncio.run(scrape_flipkart(query))
-    print(f"\nFound {len(results)} products:")
-    for product in results:
-        print(f"Title: {product['title']}")
-        print(f"Price: {product['price']}")
-        print(f"URL: {product['url']}")
-        print(f"Rating: {product['rating']}")
-        print("=" * 50)
+    # Run the FastAPI app
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    # Uncomment below for testing the scraper function directly
+    # query = "iPhone 14"  # Simplified query for testing
+    # results = asyncio.run(scrape_flipkart(query))
+    # print(f"\nFound {len(results)} products:")
+    # for product in results:
+    #     print(f"Title: {product['title']}")
+    #     print(f"Price: {product['price']}")
+    #     print(f"URL: {product['url']}")
+    #     print(f"Rating: {product['rating']}")
+    #     print("=" * 50)

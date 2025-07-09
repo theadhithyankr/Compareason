@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compareason Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .test-section {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .search-box {
+        width: 100%;
+        padding: 15px;
+        border: 2px solid #3b82f6;
+        border-radius: 8px;
+        font-size: 16px;
+        margin-bottom: 15px;
+      }
+      .btn {
+        background-color: #3b82f6;
+        color: white;
+        padding: 15px 30px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      .btn:hover {
+        background-color: #2563eb;
+      }
+      .result {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #f8fafc;
+        border-radius: 8px;
+      }
+      .error {
+        color: #dc2626;
+        background-color: #fef2f2;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 10px;
+      }
+      .success {
+        color: #059669;
+        background-color: #f0fdf4;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🛍️ Compareason Test Page</h1>
+
+    <div class="test-section">
+      <h2>Test the Search Functionality</h2>
+      <input
+        type="text"
+        id="testSearch"
+        class="search-box"
+        placeholder="Enter product name (e.g., Samsung Galaxy M14)"
+        value="Samsung Galaxy M14"
+      />
+      <button class="btn" onclick="testSearch()">Test Search</button>
+      <div id="testResult"></div>
+    </div>
+
+    <div class="test-section">
+      <h2>Backend Status</h2>
+      <button class="btn" onclick="checkBackend()">Check Backend Status</button>
+      <div id="backendResult"></div>
+    </div>
+
+    <div class="test-section">
+      <h2>Quick Links</h2>
+      <p>
+        <a href="http://localhost:3000" target="_blank"
+          >🚀 Main Frontend (React)</a
+        >
+      </p>
+      <p>
+        <a href="http://localhost:8000" target="_blank">🔧 Backend API Info</a>
+      </p>
+      <p>
+        <a href="http://localhost:8000/docs" target="_blank"
+          >📖 API Documentation</a
+        >
+      </p>
+    </div>
+
+    <script>
+      async function testSearch() {
+        const query = document.getElementById("testSearch").value;
+        const resultDiv = document.getElementById("testResult");
+
+        if (!query.trim()) {
+          resultDiv.innerHTML =
+            '<div class="error">Please enter a search query</div>';
+          return;
+        }
+
+        resultDiv.innerHTML = "<div>🔄 Searching...</div>";
+
+        try {
+          const response = await fetch("http://localhost:8000/compare", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: query,
+              max_results_per_site: 3,
+              sites: ["flipkart", "amazon", "reliance"],
+            }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            let html = '<div class="success">✅ Search Successful!</div>';
+            html += `<div class="result">`;
+            html += `<h3>Results for "${query}":</h3>`;
+            html += `<p><strong>Total Products:</strong> ${data.all_products.length}</p>`;
+
+            // Show site results
+            Object.entries(data.sites).forEach(([site, siteData]) => {
+              html += `<p><strong>${site}:</strong> ${siteData.status} (${
+                siteData.count || 0
+              } products)</p>`;
+            });
+
+            // Show best deal if available
+            if (data.best_deals && data.best_deals.cheapest_overall) {
+              const best = data.best_deals.cheapest_overall;
+              html += `<p><strong>Best Deal:</strong> ₹${best.price} on ${best.site}</p>`;
+            }
+
+            html += "</div>";
+            resultDiv.innerHTML = html;
+          } else {
+            resultDiv.innerHTML = `<div class="error">❌ Error: ${data.detail}</div>`;
+          }
+        } catch (error) {
+          resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+        }
+      }
+
+      async function checkBackend() {
+        const resultDiv = document.getElementById("backendResult");
+        resultDiv.innerHTML = "<div>🔄 Checking backend...</div>";
+
+        try {
+          const response = await fetch("http://localhost:8000/health");
+          const data = await response.json();
+
+          if (response.ok) {
+            resultDiv.innerHTML = `<div class="success">✅ Backend is running: ${data.message}</div>`;
+          } else {
+            resultDiv.innerHTML = `<div class="error">❌ Backend error: ${data.detail}</div>`;
+          }
+        } catch (error) {
+          resultDiv.innerHTML = `<div class="error">❌ Backend not accessible: ${error.message}</div>`;
+        }
+      }
+
+      // Auto-check backend on page load
+      window.onload = function () {
+        checkBackend();
+      };
+    </script>
+  </body>
+</html>

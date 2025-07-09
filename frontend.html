@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flipkart Product Scraper</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background-color: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #2874f0;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .search-form {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+      }
+      input[type="text"] {
+        flex: 1;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 5px;
+        font-size: 16px;
+        min-width: 200px;
+      }
+      input[type="number"] {
+        width: 100px;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 5px;
+        font-size: 16px;
+      }
+      button {
+        background-color: #2874f0;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 5px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #1e5bb8;
+      }
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+      .loading {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+      }
+      .results {
+        margin-top: 20px;
+      }
+      .product {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        background-color: #fafafa;
+      }
+      .product-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 10px;
+      }
+      .product-price {
+        font-size: 24px;
+        font-weight: bold;
+        color: #388e3c;
+        margin-bottom: 10px;
+      }
+      .product-rating {
+        color: #ff9800;
+        margin-bottom: 10px;
+      }
+      .product-url {
+        margin-top: 10px;
+      }
+      .product-url a {
+        color: #2874f0;
+        text-decoration: none;
+      }
+      .product-url a:hover {
+        text-decoration: underline;
+      }
+      .stats {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #666;
+        font-size: 14px;
+      }
+      .error {
+        background-color: #ffebee;
+        color: #c62828;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🛍️ Flipkart Product Scraper</h1>
+
+      <div class="search-form">
+        <input
+          type="text"
+          id="searchQuery"
+          placeholder="Enter product name (e.g., iPhone 14, Samsung mobile)"
+          value="iPhone 14"
+        />
+        <input
+          type="number"
+          id="maxResults"
+          placeholder="Max results"
+          value="10"
+          min="1"
+          max="50"
+        />
+        <button onclick="searchProducts()">Search Products</button>
+      </div>
+
+      <div id="loading" class="loading" style="display: none">
+        🔄 Searching for products...
+      </div>
+
+      <div id="error" class="error" style="display: none"></div>
+
+      <div id="results" class="results"></div>
+    </div>
+
+    <script>
+      async function searchProducts() {
+        const query = document.getElementById("searchQuery").value;
+        const maxResults = parseInt(
+          document.getElementById("maxResults").value
+        );
+
+        if (!query.trim()) {
+          alert("Please enter a search query");
+          return;
+        }
+
+        const loadingDiv = document.getElementById("loading");
+        const errorDiv = document.getElementById("error");
+        const resultsDiv = document.getElementById("results");
+        const button = document.querySelector("button");
+
+        // Show loading state
+        loadingDiv.style.display = "block";
+        errorDiv.style.display = "none";
+        resultsDiv.innerHTML = "";
+        button.disabled = true;
+        button.textContent = "Searching...";
+
+        try {
+          const response = await fetch("http://localhost:8000/search", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: query,
+              max_results: maxResults,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.detail || "Failed to search products");
+          }
+
+          displayResults(data);
+        } catch (error) {
+          console.error("Error:", error);
+          errorDiv.textContent = `Error: ${error.message}`;
+          errorDiv.style.display = "block";
+        } finally {
+          loadingDiv.style.display = "none";
+          button.disabled = false;
+          button.textContent = "Search Products";
+        }
+      }
+
+      function displayResults(data) {
+        const resultsDiv = document.getElementById("results");
+
+        if (data.products.length === 0) {
+          resultsDiv.innerHTML =
+            '<p style="text-align: center; color: #666;">No products found. Try a different search term.</p>';
+          return;
+        }
+
+        let html = `<div class="stats">Found ${data.total_found} products for "${data.query}"</div>`;
+
+        data.products.forEach((product) => {
+          html += `
+                    <div class="product">
+                        <div class="product-title">${product.title}</div>
+                        <div class="product-price">₹${
+                          typeof product.price === "number"
+                            ? product.price.toLocaleString()
+                            : product.price
+                        }</div>
+                        ${
+                          product.rating
+                            ? `<div class="product-rating">⭐ ${product.rating}</div>`
+                            : ""
+                        }
+                        <div class="product-url">
+                            <a href="${
+                              product.url
+                            }" target="_blank">View on Flipkart →</a>
+                        </div>
+                    </div>
+                `;
+        });
+
+        resultsDiv.innerHTML = html;
+      }
+
+      // Allow searching with Enter key
+      document
+        .getElementById("searchQuery")
+        .addEventListener("keypress", function (e) {
+          if (e.key === "Enter") {
+            searchProducts();
+          }
+        });
+
+      // Search on page load with default query
+      window.onload = function () {
+        // Uncomment the next line to auto-search on page load
+        // searchProducts();
+      };
+    </script>
+  </body>
+</html>
